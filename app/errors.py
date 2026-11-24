@@ -17,6 +17,13 @@ MESSAGES = {
     "STALE_REVIEW": "批次已被更新，请刷新后复核",
     "GATE_BLOCKED": "存在阻断项，不能签发",
     "NOT_APPROVED": "批次尚未签发",
+    "NOT_REVIEWED": "标本尚未复核，不能签发确认凭据",
+    "REVIEW_SUPERSEDED": "标本已更正，原复核失效，请重新复核",
+    "CREDENTIAL_SEALED": "确认凭据已签发留存，不能再修改或重复签发",
+    "CREDENTIAL_NOT_FOUND": "确认凭据不存在",
+    "SPECIMEN_NOT_FOUND": "标本不在该批次中",
+    "SPECIMEN_INVALID": "更正后的标本未通过整理校验",
+    "SPECIMEN_KEY_MISMATCH": "更正不能改变标本编号",
     "BAD_REQUEST": "请求内容不完整",
 }
 

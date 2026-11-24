@@ -1,5 +1,10 @@
 (function () {
-  var state = { payload: null, kind: 'bars', run: null, approved: false };
+  var state = { payload: null, kind: 'bars', run: null, approved: false, confirm: null, editing: null };
+  var RAW_FIELDS = ['specimen_id', 'patient_id', 'age', 'sex', 'analyte', 'value', 'unit', 'prev_value', 'hours'];
+  var FIELD_LABELS = {
+    specimen_id: '标本编号', patient_id: '患者编号', age: '年龄', sex: '性别(M/F)',
+    analyte: '检验项', value: '读数', unit: '单位', prev_value: '前次读数', hours: '间隔小时'
+  };
   var $ = function (id) { return document.getElementById(id); };
   function esc(value) {
     return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function (ch) {
@@ -99,6 +104,7 @@
       $('hold').disabled = state.approved;
       $('download').hidden = !state.approved;
       if (state.approved) $('download').href = '/api/runs/' + run.run_id + '/evidence';
+      await loadConfirmations();
     } catch (error) { setNotice(error.message); }
     finally { $('run').disabled = false; }
   }
@@ -119,6 +125,142 @@
       if (state.approved) $('download').href = '/api/runs/' + run.run_id + '/evidence';
     } catch (error) { setNotice(error.message); }
   }
+  function verdictClass(verdict) {
+    return verdict === 'REJECT' ? 'verdict-critical' : verdict === 'REVIEW' ? 'verdict-review' : 'verdict-pass';
+  }
+  async function loadConfirmations() {
+    if (!state.run) return;
+    try {
+      state.confirm = await request('/api/runs/' + state.run.run_id + '/specimens');
+      renderConfirmations();
+    } catch (error) { setNotice(error.message); }
+  }
+  function renderConfirmations() {
+    $('credential-view').hidden = true;
+    $('confirm-editor').hidden = true;
+    state.editing = null;
+    if (!state.confirm) {
+      $('confirm-body').innerHTML = '<tr><td class="empty" colspan="7">执行批次后显示标本</td></tr>';
+      $('confirm-summary').textContent = '执行批次后加载';
+      return;
+    }
+    var items = state.confirm.items;
+    var reviewed = items.filter(function (i) { return i.status === 'REVIEWED'; }).length;
+    var issued = items.filter(function (i) { return i.credential; }).length;
+    $('confirm-summary').textContent = items.length + ' 条 · 已复核 ' + reviewed + ' · 已签凭据 ' + issued;
+    $('confirm-body').innerHTML = items.map(function (item) {
+      var statusText = item.credential ? '凭据已签发' : (item.status === 'REVIEWED' ? '已复核' : '待复核');
+      var statusCls = item.credential ? 'st-sealed' : (item.status === 'REVIEWED' ? 'st-reviewed' : 'st-pending');
+      var actions;
+      if (item.credential) {
+        actions = '<button type="button" data-action="credential" data-id="' + esc(item.specimen_id) + '">查看凭据</button>';
+      } else {
+        actions = '<button type="button" data-action="review" data-id="' + esc(item.specimen_id) +
+          '"' + (item.status === 'REVIEWED' ? ' disabled' : '') + '>复核确认</button>' +
+          '<button type="button" data-action="correct" data-id="' + esc(item.specimen_id) + '">更正</button>' +
+          '<button type="button" data-action="issue" data-id="' + esc(item.specimen_id) +
+          '"' + (item.status !== 'REVIEWED' ? ' disabled' : '') + '>签发凭据</button>';
+      }
+      return '<tr>' +
+        '<td>' + esc(item.specimen_id) + '</td>' +
+        '<td>' + esc(item.analyte) + '</td>' +
+        '<td class="num">' + esc(item.value) + ' ' + esc(item.unit) + '</td>' +
+        '<td><span class="verdict ' + verdictClass(item.verdict) + '" data-v="' + esc(item.verdict) + '">' +
+          esc(item.verdict) + '</span><br><small>' + esc(item.reason || '') + '</small></td>' +
+        '<td><span class="confirm-status ' + statusCls + '">' + statusText + '</span></td>' +
+        '<td class="num">rev ' + item.revision + '</td>' +
+        '<td class="confirm-actions">' + actions + '</td>' +
+      '</tr>';
+    }).join('');
+    Array.from(document.querySelectorAll('#confirm-body [data-action]')).forEach(function (button) {
+      button.addEventListener('click', function () {
+        confirmAction(button.getAttribute('data-action'), button.getAttribute('data-id'));
+      });
+    });
+  }
+  function findItem(specimenId) {
+    return state.confirm.items.find(function (i) { return i.specimen_id === specimenId; });
+  }
+  async function confirmAction(action, specimenId) {
+    var item = findItem(specimenId);
+    if (!item) return;
+    try {
+      setNotice('');
+      if (action === 'review') {
+        var comment = window.prompt('复核意见（标本 ' + specimenId + '）', '危急值已复核');
+        if (comment === null) return;
+        await request('/api/runs/' + state.run.run_id + '/specimens/' + encodeURIComponent(specimenId) + '/review', {
+          method: 'POST',
+          body: JSON.stringify({expected_revision: item.revision, comment: comment})
+        });
+      } else if (action === 'issue') {
+        await request('/api/runs/' + state.run.run_id + '/specimens/' + encodeURIComponent(specimenId) + '/credential', {
+          method: 'POST',
+          body: JSON.stringify({expected_revision: item.revision})
+        });
+      } else if (action === 'correct') {
+        openEditor(item);
+        return;
+      } else if (action === 'credential') {
+        await showCredential(specimenId);
+        return;
+      }
+      await loadConfirmations();
+    } catch (error) { setNotice(error.message); await loadConfirmations(); }
+  }
+  function openEditor(item) {
+    state.editing = item.specimen_id;
+    $('editor-specimen').textContent = item.specimen_id;
+    $('editor-fields').innerHTML = RAW_FIELDS.map(function (field) {
+      var value = field === 'specimen_id' ? item.specimen_id :
+        (item[field] === undefined || item[field] === null ? '' : item[field]);
+      var readonly = field === 'specimen_id' ? ' readonly' : '';
+      return '<label>' + FIELD_LABELS[field] +
+        '<input data-field="' + field + '" value="' + esc(value) + '"' + readonly + '></label>';
+    }).join('');
+    $('confirm-editor').hidden = false;
+    $('confirm-editor').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+  async function submitCorrection() {
+    if (!state.editing) return;
+    var item = findItem(state.editing);
+    var corrected = {};
+    Array.from(document.querySelectorAll('#editor-fields [data-field]')).forEach(function (input) {
+      corrected[input.getAttribute('data-field')] = input.value;
+    });
+    try {
+      setNotice('');
+      $('editor-submit').disabled = true;
+      await request('/api/runs/' + state.run.run_id + '/specimens/' + encodeURIComponent(state.editing) + '/correct', {
+        method: 'POST',
+        body: JSON.stringify({expected_revision: item.revision, corrected: corrected})
+      });
+      await loadConfirmations();
+    } catch (error) {
+      setNotice(error.message);
+      await loadConfirmations();
+    } finally { $('editor-submit').disabled = false; }
+  }
+  async function showCredential(specimenId) {
+    try {
+      var artifact = await request('/api/runs/' + state.run.run_id + '/specimens/' +
+        encodeURIComponent(specimenId) + '/credential');
+      $('credential-specimen').textContent = specimenId;
+      $('credential-json').textContent = JSON.stringify(artifact, null, 2);
+      $('credential-download').href = '/api/runs/' + state.run.run_id + '/specimens/' +
+        encodeURIComponent(specimenId) + '/credential';
+      $('credential-download').setAttribute('download', 'confirmation-' + specimenId + '.json');
+      $('credential-view').hidden = false;
+      $('credential-view').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    } catch (error) { setNotice(error.message); }
+  }
+  function resetConfirmations() {
+    state.confirm = null;
+    state.editing = null;
+    $('confirm-editor').hidden = true;
+    $('credential-view').hidden = true;
+    renderConfirmations();
+  }
   async function boot() {
     try {
       var catalog = await request('/api/catalog');
@@ -136,7 +278,15 @@
       state.run = null; state.approved = false;
       $('sign').disabled = true; $('hold').disabled = true; $('download').hidden = true;
       $('run-status').textContent = '未执行批次'; $('revision').textContent = 'rev 0';
+      resetConfirmations();
       loadStage('intake');
+    });
+    $('editor-cancel').addEventListener('click', function () {
+      state.editing = null; $('confirm-editor').hidden = true;
+    });
+    $('editor-submit').addEventListener('click', submitCorrection);
+    $('credential-close').addEventListener('click', function () {
+      $('credential-view').hidden = true;
     });
   }
   document.addEventListener('DOMContentLoaded', boot);

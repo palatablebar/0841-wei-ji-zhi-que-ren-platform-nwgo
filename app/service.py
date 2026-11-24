@@ -1,25 +1,13 @@
 import json
-from decimal import Decimal
 from pathlib import Path
 
 from app.catalog import SPEC
 from app.domain.calculate import calculate_rows
 from app.domain.decision import decide_rows
+from app.domain.jsonio import jsonable
 from app.domain.prepare import prepare_rows
 from app.intake.service import load
 from app.reconcile.ledger import build_ledger
-
-
-def jsonable(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {str(key): jsonable(item) for key, item in value.items() if not str(key).startswith("_")}
-    if isinstance(value, (list, tuple)):
-        return [jsonable(item) for item in value]
-    return value
 
 
 def _stage(name):

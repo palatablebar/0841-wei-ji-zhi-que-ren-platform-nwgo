@@ -39,6 +39,36 @@
         </div>
       </div>
     </article>
+    <article class="panel" id="panel-confirm">
+      <div class="panel-head"><h2>危急值确认</h2><span class="hint" id="confirm-summary">执行批次后加载</span></div>
+      <p class="hint confirm-note">交班时可逐条复核并单独签发确认凭据，不必等整批复核；更正与签发同时提交时，过时版本会被拒绝。</p>
+      <div class="table-wrap">
+        <table class="confirm-table">
+          <thead><tr>
+            <th>标本</th><th>检验项</th><th>标准化读数</th><th>判定</th>
+            <th>复核状态</th><th>版本</th><th>操作</th>
+          </tr></thead>
+          <tbody id="confirm-body"><tr><td class="empty" colspan="7">执行批次后显示标本</td></tr></tbody>
+        </table>
+      </div>
+      <div id="confirm-editor" class="confirm-editor" hidden>
+        <h3>更正标本 <span id="editor-specimen"></span></h3>
+        <p class="hint">换算后的读数与判定都不变时原复核仍有效；任一项变化须重新复核。</p>
+        <div class="editor-grid" id="editor-fields"></div>
+        <div class="review-actions">
+          <button id="editor-cancel" type="button">取消</button>
+          <button id="editor-submit" type="button">提交更正</button>
+        </div>
+      </div>
+      <div id="credential-view" class="credential-view" hidden>
+        <h3>确认凭据 <span id="credential-specimen"></span></h3>
+        <pre id="credential-json"></pre>
+        <div class="review-actions">
+          <button id="credential-close" type="button">关闭</button>
+          <a id="credential-download" href="#" download>下载凭据 JSON</a>
+        </div>
+      </div>
+    </article>
   </section>
 </main>
 {% endblock %}
