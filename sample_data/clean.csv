@@ -1,0 +1,7 @@
+specimen_id,patient_id,age,sex,analyte,value,unit,prev_value,hours
+P1,A1,40,M,GLU,5.2,mmol/L,5.0,24
+P2,A2,32,F,HGB,12.5,g/dL,12.5,24
+P3,A3,70,M,PLT,220,10^9/L,210,24
+P4,A4,28,F,GLU,90,mg/dL,88,24
+P5,A5,55,M,GLU,6.0,mmol/L,5.5,4
+P6,A6,8,F,HGB,118,g/L,117,24
